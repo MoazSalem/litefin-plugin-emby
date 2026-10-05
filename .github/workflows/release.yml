@@ -1,0 +1,232 @@
+# ==============================================================================
+# GitHub Actions: Automated Build & Release Pipeline for Litefin Emby Plugin
+#
+# Triggers on git tags (e.g., v1.12.0.1 or 1.12.0.1).
+# Compiles the .NET Standard 2.0 assembly, packages distribution zip archive,
+# calculates checksums, publishes a GitHub Release, and updates version metadata.
+# ==============================================================================
+
+name: Build and Release Plugin
+
+on:
+  # Listen for tag pushes matching semantic version conventions
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+
+# Grant write permissions for GitHub releases and git commits back to the repo
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release Emby Plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------------
+      # Step 1: Check out the repository source tree
+      # ------------------------------------------------------------------------
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history to ensure tag references and branch tracking work cleanly
+          fetch-depth: 0
+
+      # ------------------------------------------------------------------------
+      # Step 2: Parse and sanitize semantic version from git tag
+      # ------------------------------------------------------------------------
+      - name: Extract Version
+        id: get_version
+        run: |
+          # Strip leading 'v' prefix if present (e.g., v1.12.0.1 -> 1.12.0.1)
+          TAG_NAME="${GITHUB_REF_NAME}"
+          VERSION="${TAG_NAME#v}"
+          
+          # Export to downstream GitHub Actions steps
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Parsed target release version: ${VERSION}"
+
+      # ------------------------------------------------------------------------
+      # Step 3: Install .NET SDK environment
+      # ------------------------------------------------------------------------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # Use LTS .NET 8.0 SDK for building .NET Standard 2.0 assemblies
+          dotnet-version: '8.0.x'
+
+      # ------------------------------------------------------------------------
+      # Step 4: Synchronize project metadata with release version
+      # ------------------------------------------------------------------------
+      - name: Update Litefin.Emby.Plugin.csproj Version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          
+          # Inline Node.js script to safely update or insert version tags into csproj
+          node -e "
+            const fs = require('fs');
+            const csprojPath = 'Litefin.Emby.Plugin.csproj';
+            let content = fs.readFileSync(csprojPath, 'utf8');
+
+            // Helper to replace existing XML element or insert before </PropertyGroup>
+            function setTag(xml, tag, val) {
+              const regex = new RegExp('<' + tag + '>.*?<\/' + tag + '>', 'g');
+              if (regex.test(xml)) {
+                return xml.replace(regex, '<' + tag + '>' + val + '</' + tag + '>');
+              }
+              return xml.replace('</PropertyGroup>', '    <' + tag + '>' + val + '</' + tag + '>\n  </PropertyGroup>');
+            }
+
+            // Synchronize Assembly, File, Informational, and Package versions
+            content = setTag(content, 'AssemblyVersion', '${VERSION}');
+            content = setTag(content, 'FileVersion', '${VERSION}');
+            content = setTag(content, 'InformationalVersion', '${VERSION}');
+            content = setTag(content, 'Version', '${VERSION}');
+
+            fs.writeFileSync(csprojPath, content);
+            console.log('Successfully stamped version ' + '${VERSION}' + ' into ' + csprojPath);
+          "
+
+      # ------------------------------------------------------------------------
+      # Step 5: Compile plugin in Release configuration
+      # ------------------------------------------------------------------------
+      - name: Build Plugin
+        run: |
+          # Build target netstandard2.0 assembly with Release optimizations
+          dotnet build -c Release -p:Version=${{ steps.get_version.outputs.version }}
+
+      # ------------------------------------------------------------------------
+      # Step 6: Package compiled binaries into distribution zip
+      # ------------------------------------------------------------------------
+      - name: Package Plugin
+        id: package
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          ZIP_NAME="Litefin.Emby.Plugin_${VERSION}.zip"
+          
+          # Navigate into the build output directory containing netstandard2.0 outputs
+          cd bin/Release/netstandard2.0
+          
+          # Zip all binaries, symbols, documentation XML, and embedded resource outputs
+          zip -r "../../../${ZIP_NAME}" *
+          cd ../../..
+          
+          # Compute MD5 checksum for release distribution verification
+          MD5=$(md5sum "${ZIP_NAME}" | awk '{print $1}')
+          
+          # Record outputs for subsequent release creation step
+          echo "zip_name=${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "md5=${MD5}" >> $GITHUB_OUTPUT
+          
+          echo "Built package: ${ZIP_NAME} (MD5: ${MD5})"
+
+      # ------------------------------------------------------------------------
+      # Step 7: Publish GitHub Release with attached package
+      # ------------------------------------------------------------------------
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.zip_name }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Litefin for Emby Server ${{ steps.get_version.outputs.version }}
+
+            ### Package Information
+            - **Artifact**: `${{ steps.package.outputs.zip_name }}`
+            - **MD5 Checksum**: `${{ steps.package.outputs.md5 }}`
+            - **Target Runtime**: `netstandard2.0` (compatible with Emby Server 4.8.x and 4.9.x+)
+
+            ### Installation Instructions
+            1. Download `${{ steps.package.outputs.zip_name }}`.
+            2. Extract `Litefin.Emby.Plugin.dll` into your Emby Server `plugins/` directory.
+            3. Restart Emby Server.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ------------------------------------------------------------------------
+      # Step 8: Update manifest.json if present in the repository
+      # ------------------------------------------------------------------------
+      - name: Update manifest.json (if present)
+        run: |
+          VERSION="${{ steps.package.outputs.version }}"
+          MD5="${{ steps.package.outputs.md5 }}"
+          ZIP_NAME="${{ steps.package.outputs.zip_name }}"
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${ZIP_NAME}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          node -e "
+            const fs = require('fs');
+            const manifestPath = 'manifest.json';
+            
+            // Only update manifest if the repository tracks one
+            if (!fs.existsSync(manifestPath)) {
+              console.log('No manifest.json found in repository root; skipping manifest update step.');
+              process.exit(0);
+            }
+
+            let manifest = [];
+            try {
+              manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            } catch (err) {
+              console.error('Failed to parse existing manifest.json:', err);
+              process.exit(1);
+            }
+
+            // Find or construct the Litefin Emby plugin catalog entry
+            let pluginEntry = manifest.find(p => p.guid === 'f5c68360-ca47-4648-b47c-3da5f112aa8f');
+            if (!pluginEntry) {
+              pluginEntry = {
+                guid: 'f5c68360-ca47-4648-b47c-3da5f112aa8f',
+                name: 'Litefin',
+                description: 'Litefin server plugin for Emby Server, providing optimized hero carousel, merged rows, client settings backups, and Seerr proxy.',
+                overview: 'Synchronizes client settings, layout choices, and color themes.',
+                owner: 'MoazSalem',
+                category: 'General',
+                versions: []
+              };
+              manifest.push(pluginEntry);
+            }
+
+            // Construct new release descriptor
+            const newVersion = {
+              version: '${VERSION}',
+              changelog: 'Release ${VERSION}',
+              targetAbi: '4.9.1.90',
+              sourceUrl: '${DOWNLOAD_URL}',
+              checksum: '${MD5}',
+              timestamp: '${TIMESTAMP}'
+            };
+
+            // Remove previous entry matching this version to avoid duplicates, then prepend
+            pluginEntry.versions = pluginEntry.versions.filter(v => v.version !== '${VERSION}');
+            pluginEntry.versions.unshift(newVersion);
+
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+            console.log('Updated manifest.json with release ' + '${VERSION}');
+          "
+
+      # ------------------------------------------------------------------------
+      # Step 9: Commit and push back csproj and manifest changes
+      # ------------------------------------------------------------------------
+      - name: Commit and Push Changes
+        run: |
+          # Configure bot author identities
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage csproj and manifest (if it exists)
+          git add Litefin.Emby.Plugin.csproj
+          if [ -f manifest.json ]; then
+            git add manifest.json
+          fi
+          
+          # Commit and push back to default branch, gracefully continuing if no diffs
+          git commit -m "chore: release version ${{ steps.get_version.outputs.version }}" || exit 0
+          git push origin HEAD:${{ github.event.repository.default_branch }}
