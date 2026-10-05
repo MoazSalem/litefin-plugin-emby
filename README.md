@@ -16,6 +16,7 @@ A high-performance Emby Server companion extension built for the Litefin client 
 * **Seerr Integration & Proxy**: Holds your Seerr server URL and API key server-side. Exposes authenticated discovery, search, details, and request endpoints mapped to the caller's Emby user token. Includes two connection workflows:
   * **Admin Login**: Authenticate with admin credentials once to pull the key automatically.
   * **Manual Key**: Good old-fashioned copy-paste.
+* **Client Diagnostic Logs Ingestion (`/ClientLog/Document`, `/Litefin/ClientLogs`)**: Emulates Jellyfin's client log receiver on Emby so Litefin client "Upload Logs" requests succeed instantly without client modifications. Includes a modern diagnostic viewer in the Emby Dashboard with live modal previews, direct downloads, auto-retention (up to 50 logs), and size quotas (10 MB).
 * **Zero Privacy Leaks**: Sensitive access tokens, server addresses, and temporary session state are stripped client-side before any backup hits the wire.
 
 ---

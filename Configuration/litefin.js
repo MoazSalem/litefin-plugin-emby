@@ -497,6 +497,200 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
+    // =========================================================================
+    // CLIENT DIAGNOSTIC LOGS MANAGEMENT
+    // =========================================================================
+
+    /**
+     * Retrieves the list of uploaded client diagnostic logs from the server and renders the table.
+     *
+     * @param {Element} view - The active page view element.
+     */
+    function loadClientLogsList(view) {
+        var tableBody = view.querySelector('#client-logs-table-body');
+        var countBadge = view.querySelector('#client-logs-count-badge');
+        if (!tableBody) return;
+
+        // Query the server for available diagnostic log documents
+        ApiClient.ajax({
+            type: 'GET',
+            url: ApiClient.getUrl('Litefin/ClientLogs'),
+            dataType: 'json'
+        }).then(function (logs) {
+            var logList = Array.isArray(logs) ? logs : [];
+
+            // Update header count badge with total available entries
+            if (countBadge) {
+                countBadge.textContent = logList.length + (logList.length === 1 ? ' log' : ' logs');
+            }
+
+            // Handle empty state gracefully with a friendly callout row
+            if (logList.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" style="padding: 2.5em 0; text-align: center; opacity: 0.65;">No client diagnostic logs uploaded yet. When a Litefin client uploads logs, they will appear here.</td></tr>';
+                return;
+            }
+
+            var html = '';
+            logList.forEach(function (log) {
+                var dateStr = log.DateModified ? new Date(log.DateModified).toLocaleString() : 'Unknown';
+                var safeName = escapeHtml(log.Name);
+                var safeSize = escapeHtml(log.SizeFormatted || (log.Size + ' B'));
+
+                html += '<tr class="backup-row">';
+                html += '  <td class="backup-cell-primary" style="font-family: monospace; font-size: 0.9em;">' + safeName + '</td>';
+                html += '  <td class="backup-cell-mono">' + safeSize + '</td>';
+                html += '  <td class="backup-cell-muted">' + dateStr + '</td>';
+                html += '  <td class="backup-cell-actions">';
+                html += '    <button is="emby-button" type="button" class="raised btnExportBackup btnViewLog" data-name="' + safeName + '" data-size="' + safeSize + '">View</button>';
+                html += '    <button is="emby-button" type="button" class="raised btnExportBackup btnDownloadLog" data-name="' + safeName + '">Download</button>';
+                html += '    <button is="emby-button" type="button" class="raised btnDeleteBackup btnDeleteLog" data-name="' + safeName + '">Delete</button>';
+                html += '  </td>';
+                html += '</tr>';
+            });
+
+            tableBody.innerHTML = html;
+
+            // Bind click handlers for viewing logs in the modal
+            tableBody.querySelectorAll('.btnViewLog').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var name = this.getAttribute('data-name');
+                    var size = this.getAttribute('data-size');
+                    viewClientLogInModal(view, name, size);
+                });
+            });
+
+            // Bind click handlers for direct log downloads
+            tableBody.querySelectorAll('.btnDownloadLog').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var name = this.getAttribute('data-name');
+                    downloadClientLog(name);
+                });
+            });
+
+            // Bind click handlers for individual log deletions
+            tableBody.querySelectorAll('.btnDeleteLog').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var name = this.getAttribute('data-name');
+                    deleteClientLog(view, name);
+                });
+            });
+        }).catch(function (err) {
+            tableBody.innerHTML = '<tr><td colspan="4" style="padding: 2.5em 0; text-align: center; color: #f87171;">Failed to load client diagnostic logs: ' + escapeHtml(err.message || 'Server error') + '</td></tr>';
+        });
+    }
+
+    /**
+     * Fetches log file content and displays it inside the frosted modal viewer.
+     *
+     * @param {Element} view - The active page view element.
+     * @param {string} logName - Target file name.
+     * @param {string} logSize - Human-readable size string.
+     */
+    function viewClientLogInModal(view, logName, logSize) {
+        var modal = view.querySelector('#client-log-modal');
+        var titleEl = view.querySelector('#modal-log-title');
+        var sizeEl = view.querySelector('#modal-log-size-badge');
+        var contentEl = view.querySelector('#modal-log-content');
+        if (!modal || !contentEl) return;
+
+        // Set pending presentation state
+        if (titleEl) titleEl.textContent = logName;
+        if (sizeEl) sizeEl.textContent = logSize ? '(' + logSize + ')' : '';
+        contentEl.textContent = 'Loading log document from server...';
+        modal.style.display = 'flex';
+
+        // Stash active file name for copy and download actions in modal header
+        modal.__activeLogName = logName;
+
+        // Retrieve raw text document from server
+        ApiClient.ajax({
+            type: 'GET',
+            url: ApiClient.getUrl('Litefin/ClientLogs/' + encodeURIComponent(logName)),
+            dataType: 'text'
+        }).then(function (text) {
+            contentEl.textContent = text || '(Log file is empty)';
+        }).catch(function (err) {
+            contentEl.textContent = 'Error loading log file: ' + (err.message || 'HTTP error');
+        });
+    }
+
+    /**
+     * Closes the active client log viewer modal.
+     *
+     * @param {Element} view - The active page view element.
+     */
+    function closeClientLogModal(view) {
+        var modal = view.querySelector('#client-log-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.__activeLogName = null;
+        }
+    }
+
+    /**
+     * Initiates a browser download for a specific client diagnostic log file.
+     *
+     * @param {string} logName - Target file name.
+     */
+    function downloadClientLog(logName) {
+        if (!logName) return;
+        var url = ApiClient.getUrl('Litefin/ClientLogs/' + encodeURIComponent(logName));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = logName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    /**
+     * Deletes a specific client diagnostic log file after user confirmation.
+     *
+     * @param {Element} view - The active page view element.
+     * @param {string} logName - Target file name to remove.
+     */
+    function deleteClientLog(view, logName) {
+        if (!logName) return;
+        if (!confirm('Are you sure you want to delete "' + logName + '"?')) {
+            return;
+        }
+
+        Dashboard.showLoadingMsg();
+        ApiClient.ajax({
+            type: 'DELETE',
+            url: ApiClient.getUrl('Litefin/ClientLogs/' + encodeURIComponent(logName))
+        }).then(function () {
+            Dashboard.hideLoadingMsg();
+            loadClientLogsList(view);
+        }).catch(function (err) {
+            Dashboard.hideLoadingMsg();
+            alert('Failed to delete log: ' + (err.message || 'Server error'));
+        });
+    }
+
+    /**
+     * Clears all stored client diagnostic log files after user confirmation.
+     *
+     * @param {Element} view - The active page view element.
+     */
+    function clearAllClientLogs(view) {
+        if (!confirm('Are you sure you want to permanently delete ALL client diagnostic logs?')) {
+            return;
+        }
+
+        Dashboard.showLoadingMsg();
+        ApiClient.ajax({
+            type: 'DELETE',
+            url: ApiClient.getUrl('Litefin/ClientLogs')
+        }).then(function () {
+            Dashboard.hideLoadingMsg();
+            loadClientLogsList(view);
+        }).catch(function (err) {
+            Dashboard.hideLoadingMsg();
+            alert('Failed to clear logs: ' + (err.message || 'Server error'));
+        });
+    }
+
     /**
      * Binds all permanent UI event handlers once when the view element is constructed.
      *
@@ -609,6 +803,64 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
                 reader.readAsText(file);
             };
         }
+
+        // Client Diagnostic Logs Toolbar Actions
+        var refreshLogsBtn = view.querySelector('#btn-refresh-client-logs');
+        if (refreshLogsBtn) {
+            refreshLogsBtn.onclick = function () {
+                loadClientLogsList(view);
+            };
+        }
+
+        var clearLogsBtn = view.querySelector('#btn-clear-client-logs');
+        if (clearLogsBtn) {
+            clearLogsBtn.onclick = function () {
+                clearAllClientLogs(view);
+            };
+        }
+
+        // Modal Action Buttons
+        var closeModalBtn = view.querySelector('#btn-modal-close-log');
+        if (closeModalBtn) {
+            closeModalBtn.onclick = function () {
+                closeClientLogModal(view);
+            };
+        }
+
+        var modalOverlay = view.querySelector('#client-log-modal');
+        if (modalOverlay) {
+            modalOverlay.onclick = function (e) {
+                if (e.target === modalOverlay) {
+                    closeClientLogModal(view);
+                }
+            };
+        }
+
+        var copyLogBtn = view.querySelector('#btn-modal-copy-log');
+        if (copyLogBtn) {
+            copyLogBtn.onclick = function () {
+                var contentEl = view.querySelector('#modal-log-content');
+                if (contentEl && navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(contentEl.textContent).then(function () {
+                        var span = copyLogBtn.querySelector('span');
+                        if (span) span.textContent = 'Copied!';
+                        setTimeout(function () {
+                            if (span) span.textContent = 'Copy Log';
+                        }, 2000);
+                    }).catch(function () {});
+                }
+            };
+        }
+
+        var downloadModalLogBtn = view.querySelector('#btn-modal-download-log');
+        if (downloadModalLogBtn) {
+            downloadModalLogBtn.onclick = function () {
+                var modal = view.querySelector('#client-log-modal');
+                if (modal && modal.__activeLogName) {
+                    downloadClientLog(modal.__activeLogName);
+                }
+            };
+        }
     }
 
     /**
@@ -629,6 +881,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var view = this.view;
         loadSeerrConfiguration(view);
         loadBackupsList(view);
+        loadClientLogsList(view);
     };
 
     View.prototype.onPause = function () {

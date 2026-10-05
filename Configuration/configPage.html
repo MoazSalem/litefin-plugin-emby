@@ -1,6 +1,6 @@
 <!--
   Litefin Plugin - Administration Configuration View
-  Crafted for Emby Web following Apple Human Interface Guidelines.
+  Crafted for Emby Web.
   Adapts seamlessly to both Light and Dark Emby themes via neutral alpha-based styling.
 -->
 <div id="LitefinConfigPage" is="emby-scroller" class="view flex flex-direction-column scrollFrameY flex-grow" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-controller="__plugin/litefinjs" data-title="Litefin">
@@ -33,7 +33,7 @@
           font-size: 0.95em;
         }
 
-        /* Apple HIG-inspired card container */
+        /* Elevated card container */
         #LitefinConfigPage .litefin-card {
           padding: 1.8em;
           border-radius: 12px;
@@ -67,7 +67,7 @@
           font-size: 0.88em;
         }
 
-        /* Apple-style segmented control container */
+        /* Segmented control container */
         #LitefinConfigPage .seerr-segmented-control {
           display: flex;
           background: rgba(128, 128, 128, 0.12);
@@ -225,6 +225,83 @@
           border-radius: 6px;
           cursor: pointer;
         }
+
+        /* Modal overlay for diagnostic log inspection */
+        #LitefinConfigPage .litefin-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.65);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          z-index: 100000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1.5em;
+          box-sizing: border-box;
+          animation: litefin-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        #LitefinConfigPage .litefin-modal-container {
+          background: var(--theme-card-background, #1c1c1e);
+          color: var(--theme-text-color, #f5f5f7);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 16px;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+          width: 90vw;
+          max-width: 960px;
+          height: 80vh;
+          max-height: 800px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          animation: litefin-scale-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        #LitefinConfigPage .litefin-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.1em 1.4em;
+          border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+          flex-shrink: 0;
+        }
+
+        #LitefinConfigPage .litefin-modal-body {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          padding: 0;
+          background: rgba(0, 0, 0, 0.35);
+        }
+
+        #LitefinConfigPage .litefin-log-viewer {
+          flex: 1;
+          margin: 0;
+          padding: 1.2em 1.4em;
+          overflow: auto;
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+          font-size: 0.85em;
+          line-height: 1.6;
+          color: #e5e7eb;
+          white-space: pre-wrap;
+          word-break: break-all;
+          user-select: text;
+        }
+
+        @keyframes litefin-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes litefin-scale-up {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
       </style>
       <p style="margin-top: 0.5em; margin-bottom: 2.2em; color: inherit; opacity: 0.72; line-height: 1.6; font-size: 1em; letter-spacing: -0.01em;">
         Litefin client management and server integration settings.
@@ -372,6 +449,69 @@
             <!-- Populated dynamically -->
           </tbody>
         </table>
+      </div>
+
+      <!-- ============================================================== -->
+      <!-- SECTION 3: CLIENT DIAGNOSTIC LOGS                              -->
+      <!-- ============================================================== -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8em; margin-top: 2.5em;">
+        <div>
+          <h3 class="section-heading" style="margin: 0; display: inline-block;">Client Diagnostic Logs</h3>
+          <span id="client-logs-count-badge" style="display: inline-block; margin-left: 10px; font-size: 0.8em; font-weight: 600; padding: 2px 10px; border-radius: 9999px; background: rgba(128, 128, 128, 0.15); color: inherit; opacity: 0.85;">0 logs</span>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button is="emby-button" type="button" class="raised btn-secondary" id="btn-refresh-client-logs" style="margin: 0; padding: 0.55em 1.1em; font-size: 0.9em;">
+            <span>Refresh</span>
+          </button>
+          <button is="emby-button" type="button" class="raised btnDeleteBackup" id="btn-clear-client-logs" style="margin: 0; padding: 0.55em 1.1em; font-size: 0.9em;">
+            <span>Clear All</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="paperList litefin-card" style="margin-bottom: 2em; padding: 1.5em;">
+        <p class="section-desc" style="margin-top: 0; margin-bottom: 1.2em;">
+          Crash reports, debug dumps, and client activity logs uploaded directly from Litefin applications. Retains up to 50 recent log entries.
+        </p>
+        <table class="backups-table" id="client-logs-table">
+          <thead>
+            <tr>
+              <th>Log Document</th>
+              <th>Size</th>
+              <th>Recorded (UTC)</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="client-logs-table-body">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Frosted Modal Log Viewer -->
+      <div id="client-log-modal" class="litefin-modal-overlay" style="display: none;">
+        <div class="litefin-modal-container">
+          <div class="litefin-modal-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span id="modal-log-title" style="font-weight: 600; font-size: 1.05em; color: inherit;">Log Document</span>
+              <span id="modal-log-size-badge" style="font-size: 0.8em; font-weight: 500; opacity: 0.7; font-family: monospace;"></span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button is="emby-button" type="button" class="raised btn-secondary" id="btn-modal-copy-log" style="margin: 0; padding: 0.4em 0.9em; font-size: 0.85em;">
+                <span>Copy Log</span>
+              </button>
+              <button is="emby-button" type="button" class="raised btn-secondary" id="btn-modal-download-log" style="margin: 0; padding: 0.4em 0.9em; font-size: 0.85em;">
+                <span>Download</span>
+              </button>
+              <button is="emby-button" type="button" class="raised" id="btn-modal-close-log" style="margin: 0; padding: 0.4em 0.9em; font-size: 0.85em; background: rgba(128,128,128,0.2) !important; border-radius: 6px;">
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+          <div class="litefin-modal-body">
+            <pre id="modal-log-content" class="litefin-log-viewer"></pre>
+          </div>
+        </div>
       </div>
 
     </div>

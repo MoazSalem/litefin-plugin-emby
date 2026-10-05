@@ -38,6 +38,11 @@ namespace Litefin.Emby.Plugin
         /// </summary>
         public static Plugin? Instance { get; private set; }
 
+        /// <summary>
+        /// Gets the server application paths instance.
+        /// </summary>
+        public new IApplicationPaths ApplicationPaths => base.ApplicationPaths;
+
         /// <inheritdoc />
         public override string Name => "Litefin";
 
