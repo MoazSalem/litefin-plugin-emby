@@ -2,6 +2,8 @@
 
 A high-performance Emby Server companion extension built for the Litefin client ecosystem. Delivers server-accelerated hero carousels, batch item queries, chronological merged rows, Seerr request proxies, and secure client configuration sync.
 
+If you use Jellyfin instead of Emby for a server, you should [use this instead](https://github.com/MoazSalem/litefin-plugin).
+
 ---
 
 ## Features
