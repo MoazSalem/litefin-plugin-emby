@@ -8,10 +8,11 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <AssemblyVersion>1.12.0.1</AssemblyVersion>
-    <FileVersion>1.12.0.1</FileVersion>
-    <InformationalVersion>1.12.0.1</InformationalVersion>
+    <AssemblyVersion>1.12.0.2</AssemblyVersion>
+    <FileVersion>1.12.0.2</FileVersion>
+    <InformationalVersion>1.12.0.2</InformationalVersion>
     <Description>Litefin server plugin for Emby Server, providing optimized Hero carousel, merged rows, batch item queries, settings backups, and Seerr proxy.</Description>
+      <Version>1.12.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>
