@@ -58,11 +58,17 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
             this.Logger.Info("Processing GetContinueAndNextUp for user: {0}, limit: {1}", user.Name, rowLimit);
 
-            // Parse optional ItemFields requested by the caller
-            ItemFields[]? parsedFields = null;
+            // =========================================================================
+            // Dynamic DTO Options Configuration
+            // =========================================================================
+            // Parse optional ItemFields requested by the caller.
+            // In Emby, DtoService requires ItemFields.Id to populate dto.Id when
+            // allFields is set to false. Without this explicitly requested, dto.Id
+            // defaults to string "0", breaking all downstream client routes and image lookups.
+            var fieldsList = new List<ItemFields>();
             if (!string.IsNullOrWhiteSpace(request.Fields))
             {
-                parsedFields = request.Fields!
+                var parsed = request.Fields!
                     .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(s =>
                     {
@@ -70,22 +76,36 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                         return Enum.TryParse<ItemFields>(trimmed, true, out var f) ? (ItemFields?)f : null;
                     })
                     .Where(f => f.HasValue)
-                    .Select(f => f!.Value)
-                    .ToArray();
+                    .Select(f => f!.Value);
+                fieldsList.AddRange(parsed);
             }
 
-            // Configure DTO serialization options
+            // Guarantee that primary identity and aspect ratio fields are always present
+            if (!fieldsList.Contains(ItemFields.Id))
+            {
+                fieldsList.Add(ItemFields.Id);
+            }
+
+            if (!fieldsList.Contains(ItemFields.PrimaryImageAspectRatio))
+            {
+                fieldsList.Add(ItemFields.PrimaryImageAspectRatio);
+            }
+
+            // Establish DTO options with tailored fields for minimal transport overhead
             var dtoOptions = new DtoOptions(allFields: false)
             {
-                Fields = parsedFields is { Length: > 0 }
-                    ? parsedFields
-                    : new[] { ItemFields.PrimaryImageAspectRatio },
+                Fields = fieldsList.ToArray(),
                 EnableImages = true,
                 EnableUserData = true,
                 ImageTypeLimit = 1,
             };
 
-            // Query in-progress resumable items (Continue Watching)
+            // =========================================================================
+            // Query Resumable Items (Continue Watching)
+            // =========================================================================
+            // Note: Never attach partial DtoOptions to the database InternalItemsQuery.
+            // In Emby's SqliteItemRepository, passing DtoOptions forces selective column
+            // projection where InternalId is not extracted, causing entity.InternalId to remain 0.
             var resumeItemsResult = this.LibraryManager.GetItemsResult(new InternalItemsQuery(user)
             {
                 OrderBy = new[] { ("DatePlayed", SortOrder.Descending) },
@@ -93,7 +113,6 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 StartIndex = 0,
                 Limit = rowLimit,
                 Recursive = true,
-                DtoOptions = dtoOptions,
                 IsVirtualItem = false,
                 IsFolder = false,
                 IncludeItemTypes = new[] { "Movie", "Episode", "Video" },
@@ -220,7 +239,31 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 };
             }
 
+            // =========================================================================
+            // Map Entities to DTOs & Validate Client Identifiers
+            // =========================================================================
             var dtos = this.dtoService.GetBaseItemDtos(finalItems, dtoOptions, user);
+
+            // Double check that every mapped DTO contains a valid non-zero ID
+            for (int i = 0; i < dtos.Length; i++)
+            {
+                var dto = dtos[i];
+                var entity = finalItems[i];
+
+                // Recover entity identity if DTO serializer left ID blank or at default zero
+                if (string.IsNullOrEmpty(dto.Id) || dto.Id == "0")
+                {
+                    if (entity.InternalId > 0)
+                    {
+                        dto.Id = entity.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (entity.Id != Guid.Empty)
+                    {
+                        dto.Id = entity.Id.ToString("N");
+                    }
+                }
+            }
+
             return new QueryResult<BaseItemDto>
             {
                 Items = dtos,

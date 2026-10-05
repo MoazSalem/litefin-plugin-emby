@@ -143,24 +143,7 @@
           line-height: 1.5;
         }
 
-        /* Quick Connect verification PIN display box */
-        #LitefinConfigPage .qc-code-card {
-          background: rgba(128, 128, 128, 0.08);
-          border: 1px solid rgba(128, 128, 128, 0.2);
-          border-radius: 10px;
-          padding: 1.4em;
-          margin-bottom: 1.5em;
-          text-align: center;
-        }
 
-        #LitefinConfigPage .qc-code-val {
-          font-family: monospace;
-          font-size: 2.2em;
-          font-weight: 700;
-          letter-spacing: 0.25em;
-          color: var(--theme-accent-text-color, #00a4dc);
-          user-select: all;
-        }
 
         /* Backups data table */
         #LitefinConfigPage .backups-table {
@@ -242,14 +225,7 @@
           border-radius: 6px;
           cursor: pointer;
         }
-
-        @keyframes qc-spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
       </style>
-
-      <!-- Main intro paragraph -->
       <p style="margin-top: 0.5em; margin-bottom: 2.2em; color: inherit; opacity: 0.72; line-height: 1.6; font-size: 1em; letter-spacing: -0.01em;">
         Litefin client management and server integration settings.
       </p>
@@ -302,63 +278,16 @@
           </button>
         </div>
 
-        <!-- Container for the 3 Connection Methods (hidden when API key is configured) -->
+        <!-- Container for Connection Methods (hidden when API key is configured) -->
         <div id="seerr-connection-methods">
-          <!-- Segmented Tab Navigation -->
+          <!-- Segmented Tab Navigation: Admin Login & Manual API Key -->
           <div class="seerr-segmented-control">
-            <button type="button" class="seerr-tab-btn active" data-tab="quickconnect">Quick Connect</button>
-            <button type="button" class="seerr-tab-btn" data-tab="login">Admin Login</button>
+            <button type="button" class="seerr-tab-btn active" data-tab="login">Admin Login</button>
             <button type="button" class="seerr-tab-btn" data-tab="manual">Manual API Key</button>
           </div>
 
-          <!-- TAB 1: Quick Connect Pairing -->
-          <div id="tab-pane-quickconnect" class="seerr-tab-pane" style="display: block">
-            <div class="method-panel">
-              <div style="font-weight: 600; color: inherit; margin-bottom: 0.4em; font-size: 1.05em;">Quick Connect Pairing</div>
-              <p class="section-desc" style="margin-bottom: 1em;">Generates a Quick Connect verification PIN to authorize pairing without entering passwords.</p>
-
-              <!-- Step 1: Initial state -->
-              <div id="qc-step-start">
-                <div class="info-callout">
-                  <strong>Important Note:</strong> This pairing must be authorized by an <strong>Administrator account</strong> in your Jellyfin web client (Settings &rarr; Quick Connect) to allow Litefin to retrieve the server API key from Seerr.
-                </div>
-                <button is="emby-button" type="button" class="raised button-submit btn-primary" id="btn-start-qc" style="margin: 0; padding: 0.7em 1.4em;">
-                  <span>Start Quick Connect Pairing</span>
-                </button>
-              </div>
-
-              <!-- Step 2: Active pairing session -->
-              <div id="qc-step-pairing" style="display: none">
-                <div class="info-callout">
-                  Enter the PIN below in your Jellyfin client under <strong>Settings &rarr; Quick Connect</strong> with an admin account:
-                </div>
-                <div class="qc-code-card">
-                  <div id="qc-code-display" class="qc-code-val">------</div>
-                  <div style="margin-top: 0.6em; color: inherit; opacity: 0.65; font-size: 0.85em;">
-                    Expires in <span id="qc-countdown" style="font-weight: 600; color: inherit;">--</span>s
-                  </div>
-                </div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
-                  <button is="emby-button" type="button" class="raised btn-primary" id="btn-open-qc-page" style="margin: 0; padding: 0.65em 1.2em;">
-                    <span>Open Jellyfin Quick Connect Page &rarr;</span>
-                  </button>
-                  <button is="emby-button" type="button" class="raised" id="btn-auto-authorize-qc" style="background: rgba(34, 197, 94, 0.15) !important; border: 1px solid rgba(34, 197, 94, 0.35) !important; color: #16a34a !important; margin: 0; padding: 0.65em 1.2em; border-radius: 8px; font-weight: 500;">
-                    <span>Auto-Authorize in Browser</span>
-                  </button>
-                  <button is="emby-button" type="button" class="raised btn-secondary" id="btn-cancel-qc" style="margin: 0; padding: 0.65em 1.2em;">
-                    <span>Cancel</span>
-                  </button>
-                </div>
-                <div id="qc-auth-status" style="margin-top: 1em; color: inherit; opacity: 0.72; font-size: 0.9em; display: flex; align-items: center; gap: 8px;">
-                  <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(128, 128, 128, 0.3); border-top-color: #00a4dc; border-radius: 50%; animation: qc-spin 1s linear infinite;"></span>
-                  <span>Waiting for authorization in Jellyfin...</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- TAB 2: Admin Login -->
-          <div id="tab-pane-login" class="seerr-tab-pane" style="display: none">
+          <!-- TAB 1: Admin Login (Default for Emby) -->
+          <div id="tab-pane-login" class="seerr-tab-pane" style="display: block">
             <div class="method-panel">
               <div style="font-weight: 600; color: inherit; margin-bottom: 0.4em; font-size: 1.05em;">Seerr Admin Login</div>
               <p class="section-desc" style="margin-bottom: 1.2em;">Sign in directly with your Seerr administrator credentials. Your password is used once to retrieve the API key and is never stored.</p>
@@ -377,7 +306,7 @@
             </div>
           </div>
 
-          <!-- TAB 3: Manual API Key -->
+          <!-- TAB 2: Manual API Key -->
           <div id="tab-pane-manual" class="seerr-tab-pane" style="display: none">
             <div class="method-panel">
               <div style="font-weight: 600; color: inherit; margin-bottom: 0.4em; font-size: 1.05em;">Manual Key Entry</div>

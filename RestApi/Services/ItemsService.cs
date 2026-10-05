@@ -87,10 +87,25 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                     .ToArray();
             }
 
-            // Configure lightweight DTO mapping options
+            // =========================================================================
+            // Dynamic DTO Serialization Options
+            // =========================================================================
+            // Parse optional caller fields and ensure ItemFields.Id and PrimaryImageAspectRatio
+            // are always included. In Emby, DtoService requires ItemFields.Id to populate dto.Id
+            // when allFields is false.
+            var fieldsList = parsedFields != null ? new List<ItemFields>(parsedFields) : new List<ItemFields>();
+            if (!fieldsList.Contains(ItemFields.Id))
+            {
+                fieldsList.Add(ItemFields.Id);
+            }
+            if (!fieldsList.Contains(ItemFields.PrimaryImageAspectRatio))
+            {
+                fieldsList.Add(ItemFields.PrimaryImageAspectRatio);
+            }
+
             var dtoOptions = new DtoOptions(allFields: false)
             {
-                Fields = parsedFields is { Length: > 0 } ? parsedFields : Array.Empty<ItemFields>(),
+                Fields = fieldsList.ToArray(),
                 EnableImages = true,
                 EnableUserData = true,
                 ImageTypeLimit = 1,
@@ -149,6 +164,25 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
                     // Convert entities to DTO format
                     var dtos = this.dtoService.GetBaseItemDtos(items, dtoOptions, user);
+
+                    // Safeguard valid client IDs to avoid '0' or blank identity strings
+                    for (int i = 0; i < dtos.Length; i++)
+                    {
+                        var dto = dtos[i];
+                        var entity = items[i];
+                        if (string.IsNullOrEmpty(dto.Id) || dto.Id == "0")
+                        {
+                            if (entity.InternalId > 0)
+                            {
+                                dto.Id = entity.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            }
+                            else if (entity.Id != Guid.Empty)
+                            {
+                                dto.Id = entity.Id.ToString("N");
+                            }
+                        }
+                    }
+
                     result[parentId] = dtos;
                 }
                 catch (Exception ex)
@@ -188,6 +222,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
             var dtoOptions = new DtoOptions(allFields: false)
             {
+                Fields = new[] { ItemFields.Id, ItemFields.PrimaryImageAspectRatio },
                 EnableImages = true,
                 EnableUserData = false,
                 ImageTypeLimit = 1,
@@ -240,7 +275,6 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                         OrderBy = new[] { ("Random", SortOrder.Ascending) },
                         Limit = 5,
                         Recursive = true,
-                        DtoOptions = dtoOptions,
                     };
 
                     QueryResult<BaseItem> itemsResult;

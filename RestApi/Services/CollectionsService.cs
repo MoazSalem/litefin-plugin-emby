@@ -81,9 +81,19 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                     .ToArray();
             }
 
+            var fieldsList = parsedFields != null ? new List<ItemFields>(parsedFields) : new List<ItemFields>();
+            if (!fieldsList.Contains(ItemFields.Id))
+            {
+                fieldsList.Add(ItemFields.Id);
+            }
+            if (!fieldsList.Contains(ItemFields.PrimaryImageAspectRatio))
+            {
+                fieldsList.Add(ItemFields.PrimaryImageAspectRatio);
+            }
+
             var dtoOptions = new DtoOptions(allFields: false)
             {
-                Fields = parsedFields is { Length: > 0 } ? parsedFields : Array.Empty<ItemFields>(),
+                Fields = fieldsList.ToArray(),
                 EnableImages = true,
                 EnableUserData = true,
             };
@@ -119,6 +129,24 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
             var finalArray = pagedCollections.ToArray();
             var dtos = this.dtoService.GetBaseItemDtos(finalArray, dtoOptions, user);
+
+            // Safeguard valid client IDs to avoid '0' or blank identity strings
+            for (int i = 0; i < dtos.Length; i++)
+            {
+                var dto = dtos[i];
+                var entity = finalArray[i];
+                if (string.IsNullOrEmpty(dto.Id) || dto.Id == "0")
+                {
+                    if (entity.InternalId > 0)
+                    {
+                        dto.Id = entity.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (entity.Id != Guid.Empty)
+                    {
+                        dto.Id = entity.Id.ToString("N");
+                    }
+                }
+            }
 
             return new QueryResult<BaseItemDto>
             {

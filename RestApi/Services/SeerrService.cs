@@ -183,175 +183,8 @@ namespace Litefin.Emby.Plugin.RestApi.Services
         }
 
         #endregion
+        #region Admin Authentication
 
-        #region QuickConnect and Admin Authentication
-
-        /// <summary>
-        /// Processes POST /Litefin/Seerr/Auth/QuickConnect/Initiate to start a pairing session.
-        /// </summary>
-        public async Task<object> Post(InitiateQuickConnectRequest request)
-        {
-            if (!this.IsUserAdmin())
-            {
-                throw new HttpException("Elevation required.") { StatusCode = HttpStatusCode.Forbidden };
-            }
-
-            if (request == null || !TryNormalizeUrl(request.SeerrUrl, out var baseUrl))
-            {
-                throw new HttpException("A valid Seerr URL is required.") { StatusCode = HttpStatusCode.BadRequest };
-            }
-
-            try
-            {
-                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v1/auth/jellyfin/quickconnect/initiate");
-                httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(this.Request.CancellationToken);
-                timeoutSource.CancelAfter(RequestTimeout);
-
-                using var response = await HttpClient.SendAsync(httpRequest, timeoutSource.Token).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new HttpException("Seerr rejected Quick Connect initiation. Ensure Quick Connect is enabled in Seerr.")
-                    {
-                        StatusCode = HttpStatusCode.BadGateway,
-                    };
-                }
-
-                using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: timeoutSource.Token).ConfigureAwait(false);
-
-                var code = doc.RootElement.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : string.Empty;
-                var secret = doc.RootElement.TryGetProperty("secret", out var secretProp) ? secretProp.GetString() : string.Empty;
-
-                return new SeerrQuickConnectInitiateResult
-                {
-                    Code = code ?? string.Empty,
-                    Secret = secret ?? string.Empty,
-                };
-            }
-            catch (HttpException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                this.Logger.Warn("Quick Connect initiate error: {0}", ex.Message);
-                throw new HttpException("Unable to contact Seerr server.") { StatusCode = HttpStatusCode.BadGateway };
-            }
-        }
-
-        /// <summary>
-        /// Processes POST /Litefin/Seerr/Auth/QuickConnect/Check to verify pairing and save acquired credentials.
-        /// </summary>
-        public async Task<object> Post(CheckQuickConnectRequest request)
-        {
-            if (!this.IsUserAdmin())
-            {
-                throw new HttpException("Elevation required.") { StatusCode = HttpStatusCode.Forbidden };
-            }
-
-            if (request == null || !TryNormalizeUrl(request.SeerrUrl, out var baseUrl) || string.IsNullOrWhiteSpace(request.Secret))
-            {
-                throw new HttpException("A valid Seerr URL and Secret are required.") { StatusCode = HttpStatusCode.BadRequest };
-            }
-
-            try
-            {
-                var checkUrl = $"{baseUrl}/api/v1/auth/jellyfin/quickconnect/check?secret={Uri.EscapeDataString(request.Secret)}";
-                using var checkRequest = new HttpRequestMessage(HttpMethod.Get, checkUrl);
-                checkRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(this.Request.CancellationToken);
-                timeoutSource.CancelAfter(RequestTimeout);
-
-                using var checkResponse = await HttpClient.SendAsync(checkRequest, timeoutSource.Token).ConfigureAwait(false);
-                if (!checkResponse.IsSuccessStatusCode)
-                {
-                    return new SeerrQuickConnectCheckResult
-                    {
-                        Authenticated = false,
-                        Success = false,
-                        Message = "Pending approval or expired code.",
-                    };
-                }
-
-                using var checkStream = await checkResponse.Content.ReadAsStreamAsync().ConfigureAwait(false);
-                using var checkDoc = await JsonDocument.ParseAsync(checkStream, cancellationToken: timeoutSource.Token).ConfigureAwait(false);
-
-                var isAuthenticated = checkDoc.RootElement.TryGetProperty("authenticated", out var authProp) && authProp.GetBoolean();
-                if (!isAuthenticated)
-                {
-                    return new SeerrQuickConnectCheckResult
-                    {
-                        Authenticated = false,
-                        Success = false,
-                    };
-                }
-
-                // Exchange authorized secret for an authenticated session
-                var authPayload = JsonSerializer.Serialize(new { secret = request.Secret });
-                using var exchangeRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v1/auth/jellyfin/quickconnect/authenticate")
-                {
-                    Content = new StringContent(authPayload, Encoding.UTF8, "application/json"),
-                };
-                exchangeRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                using var exchangeResponse = await HttpClient.SendAsync(exchangeRequest, timeoutSource.Token).ConfigureAwait(false);
-                if (!exchangeResponse.IsSuccessStatusCode)
-                {
-                    return new SeerrQuickConnectCheckResult
-                    {
-                        Authenticated = true,
-                        Success = false,
-                        Message = "Quick Connect authorized, but session exchange failed.",
-                    };
-                }
-
-                var cookieHeader = GetCookieHeader(exchangeResponse);
-                if (string.IsNullOrWhiteSpace(cookieHeader))
-                {
-                    return new SeerrQuickConnectCheckResult
-                    {
-                        Authenticated = true,
-                        Success = false,
-                        Message = "Session cookie missing after authentication.",
-                    };
-                }
-
-                // Extract main settings API key
-                var apiKey = await this.FetchSeerrApiKeyAsync(baseUrl, cookieHeader!, timeoutSource.Token).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    return new SeerrQuickConnectCheckResult
-                    {
-                        Authenticated = true,
-                        Success = false,
-                        Message = "User lacks administrator rights in Seerr to extract the API key.",
-                    };
-                }
-
-                SaveSeerrConfiguration(baseUrl, apiKey!);
-                this.Logger.Info("Successfully paired Litefin with Seerr at {0}", baseUrl);
-
-                return new SeerrQuickConnectCheckResult
-                {
-                    Authenticated = true,
-                    Success = true,
-                    Message = "Quick Connect pairing successful! Seerr API key acquired and saved.",
-                };
-            }
-            catch (Exception ex)
-            {
-                this.Logger.Warn("Quick Connect check error: {0}", ex.Message);
-                return new SeerrQuickConnectCheckResult
-                {
-                    Authenticated = false,
-                    Success = false,
-                    Message = "Unable to contact Seerr server.",
-                };
-            }
-        }
 
         /// <summary>
         /// Processes POST /Litefin/Seerr/Auth/Login to acquire the API key using administrator credentials.
@@ -375,28 +208,37 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(this.Request.CancellationToken);
                 timeoutSource.CancelAfter(RequestTimeout);
 
-                var jellyfinLoginPayload = JsonSerializer.Serialize(new
-                {
-                    username = request.Username,
-                    password = password,
-                });
-
-                using var jfRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v1/auth/jellyfin")
-                {
-                    Content = new StringContent(jellyfinLoginPayload, Encoding.UTF8, "application/json"),
-                };
-                jfRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                using var jfResponse = await HttpClient.SendAsync(jfRequest, timeoutSource.Token).ConfigureAwait(false);
                 HttpResponseMessage? authResponse = null;
 
-                if (jfResponse.IsSuccessStatusCode)
+                // 1. Try Jellyfin authentication endpoint if configured in Seerr
+                try
                 {
-                    authResponse = jfResponse;
+                    var jellyfinLoginPayload = JsonSerializer.Serialize(new
+                    {
+                        username = request.Username,
+                        password = password,
+                    });
+
+                    using var jfRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/v1/auth/jellyfin")
+                    {
+                        Content = new StringContent(jellyfinLoginPayload, Encoding.UTF8, "application/json"),
+                    };
+                    jfRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                    var jfResponse = await HttpClient.SendAsync(jfRequest, timeoutSource.Token).ConfigureAwait(false);
+                    if (jfResponse.IsSuccessStatusCode)
+                    {
+                        authResponse = jfResponse;
+                    }
                 }
-                else
+                catch (Exception jfEx)
                 {
-                    // Fall back to local login endpoint
+                    this.Logger.Debug("Jellyfin auth attempt failed: {0}", jfEx.Message);
+                }
+
+                // 2. If Jellyfin auth did not succeed, fall back to local authentication endpoint
+                if (authResponse == null)
+                {
                     var localLoginPayload = JsonSerializer.Serialize(new
                     {
                         email = request.Username,
@@ -419,7 +261,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                         return new SeerrAdminLoginResult
                         {
                             Success = false,
-                            Message = "Invalid credentials. Verify your username and password.",
+                            Message = "Invalid credentials. Verify your email or username and password.",
                         };
                     }
                 }

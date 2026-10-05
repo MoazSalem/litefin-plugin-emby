@@ -14,8 +14,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             .replace(/'/g, '&#039;');
     }
 
-    // Quick Connect polling state scoped per view
-    var QC_MAX_POLLS = 60; // 60 polls * 3s interval = 3 minutes timeout
+
 
     /**
      * Updates the status banner for Seerr connection and authentication operations.
@@ -85,169 +84,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         });
     }
 
-    /**
-     * Cancels an ongoing Quick Connect authentication session and restores action buttons.
-     *
-     * @param {Element} view - The active page view element.
-     */
-    function cancelQuickConnect(view) {
-        var state = view.__litefinState || (view.__litefinState = {});
-        if (state.qcPollTimer !== null && state.qcPollTimer !== undefined) {
-            clearInterval(state.qcPollTimer);
-            state.qcPollTimer = null;
-        }
-        state.qcSecret = null;
-        state.qcCode = null;
-        state.qcPollCount = 0;
 
-        var card = view.querySelector('#qc-code-card');
-        var startBtn = view.querySelector('#btn-start-qc');
-        var openBtn = view.querySelector('#btn-open-qc-page');
-        var autoAuthBtn = view.querySelector('#btn-auto-authorize-qc');
-        var cancelBtn = view.querySelector('#btn-cancel-qc');
-
-        if (card) card.style.display = 'none';
-        if (startBtn) startBtn.style.display = 'inline-flex';
-        if (openBtn) openBtn.style.display = 'none';
-        if (autoAuthBtn) autoAuthBtn.style.display = 'none';
-        if (cancelBtn) cancelBtn.style.display = 'none';
-    }
-
-    /**
-     * Copies the Quick Connect code to clipboard and opens the Emby Quick Connect page.
-     *
-     * @param {Element} view - The active page view element.
-     */
-    function openQuickConnectWindow(view) {
-        var state = view.__litefinState || {};
-        if (!state.qcCode) return;
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(state.qcCode).catch(function () {});
-        }
-
-        var qcUrl = ApiClient.getUrl('web/#/quickconnect');
-        window.open(qcUrl, '_blank');
-        setSeerrStatus(view, 'Code ' + state.qcCode + ' copied to clipboard! Authorize in the opened window.', null, true);
-    }
-
-    /**
-     * Authorizes Quick Connect code using the current administrator session.
-     *
-     * @param {Element} view - The active page view element.
-     */
-    function autoAuthorizeQuickConnect(view) {
-        var state = view.__litefinState || {};
-        if (!state.qcCode) return;
-
-        setSeerrStatus(view, 'Authorizing code ' + state.qcCode + ' with current session...', null, true);
-        Dashboard.showLoadingMsg();
-
-        ApiClient.ajax({
-            type: 'POST',
-            url: ApiClient.getUrl('QuickConnect/Authorize?code=' + encodeURIComponent(state.qcCode)),
-            dataType: 'json'
-        }).then(function () {
-            Dashboard.hideLoadingMsg();
-            setSeerrStatus(view, 'Code authorized! Waiting for Seerr to verify...', null, true);
-        }).catch(function () {
-            Dashboard.hideLoadingMsg();
-            openQuickConnectWindow(view);
-        });
-    }
-
-    /**
-     * Initiates Quick Connect session with the specified Seerr server.
-     *
-     * @param {Element} view - The active page view element.
-     */
-    function startQuickConnect(view) {
-        var seerrUrlInput = view.querySelector('#txt-seerr-url');
-        var seerrUrl = seerrUrlInput ? seerrUrlInput.value.trim().replace(/\/+$/, '') : '';
-        if (!seerrUrl) {
-            setSeerrStatus(view, 'Please enter the Seerr Server URL first.', false);
-            return;
-        }
-
-        cancelQuickConnect(view);
-        setSeerrStatus(view, 'Initiating Quick Connect session...', null, true);
-        Dashboard.showLoadingMsg();
-
-        var state = view.__litefinState || (view.__litefinState = {});
-
-        ApiClient.ajax({
-            type: 'POST',
-            url: ApiClient.getUrl('Litefin/Seerr/Auth/QuickConnect/Initiate'),
-            contentType: 'application/json',
-            dataType: 'json',
-            data: JSON.stringify({ SeerrUrl: seerrUrl })
-        }).then(function (result) {
-            Dashboard.hideLoadingMsg();
-            if (!result || !result.Code || !result.Secret) {
-                setSeerrStatus(view, 'Invalid Quick Connect response from server.', false);
-                return;
-            }
-
-            state.qcSecret = result.Secret;
-            state.qcCode = result.Code;
-            state.qcPollCount = 0;
-
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(result.Code).catch(function () {});
-            }
-
-            var codeDisplay = view.querySelector('#qc-code-display');
-            var card = view.querySelector('#qc-code-card');
-            var startBtn = view.querySelector('#btn-start-qc');
-            var openBtn = view.querySelector('#btn-open-qc-page');
-            var autoAuthBtn = view.querySelector('#btn-auto-authorize-qc');
-            var cancelBtn = view.querySelector('#btn-cancel-qc');
-
-            if (codeDisplay) codeDisplay.textContent = result.Code;
-            if (card) card.style.display = 'block';
-            if (startBtn) startBtn.style.display = 'none';
-            if (openBtn) openBtn.style.display = 'inline-flex';
-            if (autoAuthBtn) autoAuthBtn.style.display = 'inline-flex';
-            if (cancelBtn) cancelBtn.style.display = 'inline-flex';
-
-            setSeerrStatus(view, 'Code ' + result.Code + ' generated (copied to clipboard). Authorize below.', null, true);
-
-            state.qcPollTimer = setInterval(function () {
-                state.qcPollCount++;
-                if (state.qcPollCount > QC_MAX_POLLS) {
-                    cancelQuickConnect(view);
-                    setSeerrStatus(view, 'Quick Connect timed out. Please try again.', false);
-                    return;
-                }
-
-                ApiClient.ajax({
-                    type: 'POST',
-                    url: ApiClient.getUrl('Litefin/Seerr/Auth/QuickConnect/Check'),
-                    contentType: 'application/json',
-                    dataType: 'json',
-                    data: JSON.stringify({
-                        SeerrUrl: seerrUrl,
-                        Secret: state.qcSecret
-                    })
-                }).then(function (statusResult) {
-                    if (statusResult && statusResult.Authenticated && statusResult.Success) {
-                        cancelQuickConnect(view);
-                        loadSeerrConfiguration(view);
-                        setSeerrStatus(view, 'Quick Connect authorized. Seerr API key acquired and saved.', true);
-                    } else if (statusResult && statusResult.Authenticated && !statusResult.Success) {
-                        cancelQuickConnect(view);
-                        setSeerrStatus(view, statusResult.Message || 'Quick Connect authorization failed.', false);
-                    }
-                }).catch(function () {});
-            }, 3000);
-        }).catch(function (err) {
-            Dashboard.hideLoadingMsg();
-            var msg = err && err.responseJSON && err.responseJSON.message
-                ? err.responseJSON.message
-                : 'Failed to initiate Quick Connect.';
-            setSeerrStatus(view, msg, false);
-        });
-    }
 
     /**
      * Authenticates with Seerr using administrator credentials to retrieve the API key.
@@ -255,16 +92,19 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
      * @param {Element} view - The active page view element.
      */
     function loginWithSeerrCredentials(view) {
-        var seerrUrl = (view.querySelector('#txt-seerr-url').value || '').trim().replace(/\/+$/, '');
-        var username = (view.querySelector('#txt-seerr-user').value || '').trim();
-        var password = view.querySelector('#txt-seerr-password').value;
+        var seerrUrlInput = view.querySelector('#txt-seerr-url');
+        var seerrUrl = (seerrUrlInput ? seerrUrlInput.value : '').trim().replace(/\/+$/, '');
+        var userInput = view.querySelector('#txt-seerr-email') || view.querySelector('#txt-seerr-user');
+        var username = (userInput ? userInput.value : '').trim();
+        var passInput = view.querySelector('#txt-seerr-password');
+        var password = passInput ? passInput.value : '';
 
         if (!seerrUrl) {
             setSeerrStatus(view, 'Please enter the Seerr Server URL first.', false);
             return;
         }
         if (!username) {
-            setSeerrStatus(view, 'Please enter the Seerr admin username.', false);
+            setSeerrStatus(view, 'Please enter your Seerr admin email or username.', false);
             return;
         }
 
@@ -284,7 +124,8 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         }).then(function (result) {
             Dashboard.hideLoadingMsg();
             if (result && result.Success) {
-                view.querySelector('#txt-seerr-password').value = '';
+                var passField = view.querySelector('#txt-seerr-password');
+                if (passField) passField.value = '';
                 loadSeerrConfiguration(view);
                 setSeerrStatus(view, 'Logged in successfully. Seerr API key acquired and saved.', true);
             } else {
@@ -292,9 +133,11 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
             }
         }).catch(function (err) {
             Dashboard.hideLoadingMsg();
-            var msg = err && err.responseJSON && err.responseJSON.Message
-                ? err.responseJSON.Message
-                : 'Admin login failed. Check credentials.';
+            var msg = err && err.responseJSON && (err.responseJSON.Message || err.responseJSON.message)
+                ? (err.responseJSON.Message || err.responseJSON.message)
+                : err && err.responseText
+                    ? err.responseText
+                    : 'Admin login failed. Check credentials.';
             setSeerrStatus(view, msg, false);
         });
     }
@@ -677,17 +520,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
         var saveUrlBtn = view.querySelector('#btn-save-seerr-url');
         if (saveUrlBtn) saveUrlBtn.onclick = function () { saveSeerrUrl(view); };
 
-        var startQcBtn = view.querySelector('#btn-start-qc');
-        if (startQcBtn) startQcBtn.onclick = function () { startQuickConnect(view); };
 
-        var openQcBtn = view.querySelector('#btn-open-qc-page');
-        if (openQcBtn) openQcBtn.onclick = function () { openQuickConnectWindow(view); };
-
-        var autoAuthBtn = view.querySelector('#btn-auto-authorize-qc');
-        if (autoAuthBtn) autoAuthBtn.onclick = function () { autoAuthorizeQuickConnect(view); };
-
-        var cancelQcBtn = view.querySelector('#btn-cancel-qc');
-        if (cancelQcBtn) cancelQcBtn.onclick = function () { cancelQuickConnect(view); };
 
         var loginSeerrBtn = view.querySelector('#btn-login-seerr');
         if (loginSeerrBtn) loginSeerrBtn.onclick = function () { loginWithSeerrCredentials(view); };
@@ -799,8 +632,7 @@ define(['baseView', 'loading', 'emby-input', 'emby-button', 'emby-checkbox', 'em
     };
 
     View.prototype.onPause = function () {
-        var view = this.view;
-        cancelQuickConnect(view);
+        // Delegate cleanup to base implementation
         BaseView.prototype.onPause.apply(this, arguments);
     };
 

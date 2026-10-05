@@ -98,69 +98,6 @@ namespace Litefin.Emby.Plugin.Models
         public string? SeerrApiKey { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Result payload returned upon initiating Quick Connect.
-    /// </summary>
-    public class SeerrQuickConnectInitiateResult
-    {
-        /// <summary>
-        /// Gets or sets the user-facing verification code (e.g. 6 characters).
-        /// </summary>
-        public string Code { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the secret token used for status verification polling.
-        /// </summary>
-        public string Secret { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Result of checking Quick Connect status and retrieving the Seerr API key.
-    /// </summary>
-    public class SeerrQuickConnectCheckResult
-    {
-        /// <summary>
-        /// Gets or sets a value indicating whether the code was authorized by the user.
-        /// </summary>
-        public bool Authenticated { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether the API key was successfully retrieved and saved.
-        /// </summary>
-        public bool Success { get; set; }
-
-        /// <summary>
-        /// Gets or sets an optional user-facing message or error explanation.
-        /// </summary>
-        public string? Message { get; set; }
-    }
-
-    /// <summary>
-    /// Request payload to initiate a Quick Connect session with Seerr.
-    /// </summary>
-    public class SeerrQuickConnectInitiateRequest
-    {
-        /// <summary>
-        /// Gets or sets the target Seerr base URL.
-        /// </summary>
-        public string SeerrUrl { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Request payload to check Quick Connect status and complete API key acquisition.
-    /// </summary>
-    public class SeerrQuickConnectCheckRequest
-    {
-        /// <summary>
-        /// Gets or sets the target Seerr base URL.
-        /// </summary>
-        public string SeerrUrl { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Gets or sets the secret token from initiation.
-        /// </summary>
-        public string Secret { get; set; } = string.Empty;
-    }
 
     /// <summary>
     /// Request payload to test whether a Seerr server is reachable without requiring an API key.

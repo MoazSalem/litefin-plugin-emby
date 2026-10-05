@@ -37,23 +37,7 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     {
     }
 
-    /// <summary>
-    /// Initiates a Quick Connect pairing session with Seerr.
-    /// </summary>
-    [Route("/Litefin/Seerr/Auth/QuickConnect/Initiate", "POST", Summary = "Initiates a Quick Connect pairing session")]
-    [Authenticated]
-    public class InitiateQuickConnectRequest : SeerrQuickConnectInitiateRequest, IReturn<SeerrQuickConnectInitiateResult>
-    {
-    }
 
-    /// <summary>
-    /// Checks Quick Connect status and retrieves API key upon authorization.
-    /// </summary>
-    [Route("/Litefin/Seerr/Auth/QuickConnect/Check", "POST", Summary = "Checks Quick Connect authorization status")]
-    [Authenticated]
-    public class CheckQuickConnectRequest : SeerrQuickConnectCheckRequest, IReturn<SeerrQuickConnectCheckResult>
-    {
-    }
 
     /// <summary>
     /// Authenticates with Seerr using administrator credentials to obtain the API key.

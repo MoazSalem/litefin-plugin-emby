@@ -13,8 +13,7 @@ A high-performance Emby Server companion extension built for the Litefin client 
 * **Reverse Collection Lookup (`/Litefin/Items/{itemId}/Collections`)**: Reverse-resolves which BoxSet collections contain a given movie or show without burning client cycles scanning every collection folder.
 * **Multi-Snapshot Settings Backups**: Save unlimited client configuration snapshots. Tag them with custom names or let Litefin auto-tag by device metadata. Restores work across devices; overwrites and deletions are locked to the owning user.
 * **Admin Dashboard Hub**: Manage backups directly inside Emby Dashboard (**Settings** &rarr; **Plugins** &rarr; **Litefin**). Export snapshots as JSON, import/merge existing backups, or prune stale records.
-* **Seerr Integration & Proxy**: Holds your Seerr server URL and API key server-side. Exposes authenticated discovery, search, details, and request endpoints mapped to the caller's Emby user token. Includes three connection workflows:
-  * **Quick Connect Pairing**: One-click pairing verified in your web client.
+* **Seerr Integration & Proxy**: Holds your Seerr server URL and API key server-side. Exposes authenticated discovery, search, details, and request endpoints mapped to the caller's Emby user token. Includes two connection workflows:
   * **Admin Login**: Authenticate with admin credentials once to pull the key automatically.
   * **Manual Key**: Good old-fashioned copy-paste.
 * **Zero Privacy Leaks**: Sensitive access tokens, server addresses, and temporary session state are stripped client-side before any backup hits the wire.

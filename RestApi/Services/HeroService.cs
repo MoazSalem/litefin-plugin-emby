@@ -48,13 +48,21 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
             this.Logger.Info("Processing GetHeroItems for user: {0}, limit: {1}, ignoreWatched: {2}", user.Name, itemLimit, filterWatched);
 
-            // Prepare DTO options requesting only essential fields to minimize payload overhead
+            // Configure DTO options with all necessary identifiers and metadata fields
+            // Note: In Emby, ItemFields.Id, ProductionYear, RunTimeTicks, and ratings must be explicitly requested
             var dtoOptions = new DtoOptions(allFields: false)
             {
                 Fields = new[]
                 {
+                    ItemFields.Id,
                     ItemFields.Overview,
                     ItemFields.PrimaryImageAspectRatio,
+                    ItemFields.ProductionYear,
+                    ItemFields.RunTimeTicks,
+                    ItemFields.OfficialRating,
+                    ItemFields.CommunityRating,
+                    ItemFields.SeriesId,
+                    ItemFields.ParentId,
                     ItemFields.ProviderIds,
                 },
                 EnableImages = true,
@@ -62,7 +70,9 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 ImageTypeLimit = 1,
             };
 
-            // Fetch a candidate pool to filter backdrops and played status
+            // Query candidate pool without attaching partial DtoOptions to the database query
+            // Setting DtoOptions on InternalItemsQuery causes SqliteItemRepository to project only partial columns,
+            // leaving item.InternalId at default 0 and breaking downstream API links.
             var query = new InternalItemsQuery(user)
             {
                 IncludeItemTypes = new[] { "Movie", "Series" },
@@ -70,7 +80,6 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 OrderBy = new[] { ("Random", SortOrder.Ascending) },
                 Limit = itemLimit * 4,
                 Recursive = true,
-                DtoOptions = dtoOptions,
             };
 
             if (filterWatched)
@@ -112,10 +121,26 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             // Map server entities to lightweight DTOs
             var dtos = this.dtoService.GetBaseItemDtos(selectedItems.ToArray(), dtoOptions, user);
 
-            // Strip redundant heavy fields for faster JSON transport over TV network stacks
+            // Ensure valid client-facing IDs and strip redundant heavy fields for faster JSON transport over TV network stacks
             for (int i = 0; i < dtos.Length; i++)
             {
                 var dto = dtos[i];
+                var entity = selectedItems[i];
+
+                // Ensure Id is valid and non-zero for client routing and image asset retrieval
+                if (string.IsNullOrEmpty(dto.Id) || dto.Id == "0")
+                {
+                    if (entity.InternalId > 0)
+                    {
+                        dto.Id = entity.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (entity.Id != Guid.Empty)
+                    {
+                        dto.Id = entity.Id.ToString("N");
+                    }
+                }
+
+                // Strip unneeded heavy fields to keep payload lightweight
                 dto.PremiereDate = null;
                 dto.EndDate = null;
                 dto.Status = null;

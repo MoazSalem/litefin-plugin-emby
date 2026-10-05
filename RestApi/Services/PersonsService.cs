@@ -162,10 +162,12 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             combinedItems.AddRange(songs);
 
             // Establish serialization options with minimal payload overhead
+            // Emby requires ItemFields.Id to generate valid DTO IDs when allFields is false
             var dtoOptions = new DtoOptions(allFields: false)
             {
                 Fields = new[]
                 {
+                    ItemFields.Id,
                     ItemFields.PrimaryImageAspectRatio,
                     ItemFields.SeriesStudio,
                     ItemFields.MediaSources,
@@ -183,6 +185,19 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             {
                 var item = combinedItems[i];
                 var itemDto = dtos[i];
+
+                // Safeguard against '0' or blank ID values from partial DTO mapping
+                if (string.IsNullOrEmpty(itemDto.Id) || itemDto.Id == "0")
+                {
+                    if (item.InternalId > 0)
+                    {
+                        itemDto.Id = item.InternalId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else if (item.Id != Guid.Empty)
+                    {
+                        itemDto.Id = item.Id.ToString("N");
+                    }
+                }
 
                 // Fetch people associated with this media item
                 var itemPeople = this.LibraryManager.GetItemPeople(item);
