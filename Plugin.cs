@@ -65,16 +65,28 @@ namespace Litefin.Emby.Plugin
         /// <inheritdoc />
         public IEnumerable<PluginPageInfo> GetPages()
         {
+            // Namespace prefix for accessing manifest embedded resources
+            var ns = this.GetType().Namespace;
+
+            // Return configuration page and associated JavaScript controller
             return new[]
             {
+                // Main administrative HTML view fragment for Emby dashboard
                 new PluginPageInfo
                 {
                     Name = this.Name,
                     DisplayName = this.Name,
-                    EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", this.GetType().Namespace),
+                    EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.configPage.html", ns),
                     EnableInMainMenu = true,
                     MenuSection = "plugins",
                     MenuIcon = "tv",
+                },
+
+                // Controller module for the config page, referenced via data-controller="__plugin/litefinjs"
+                new PluginPageInfo
+                {
+                    Name = "litefinjs",
+                    EmbeddedResourcePath = string.Format(CultureInfo.InvariantCulture, "{0}.Configuration.litefin.js", ns),
                 },
             };
         }

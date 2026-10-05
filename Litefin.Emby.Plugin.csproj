@@ -24,9 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Embedded administrative configuration web page and icons -->
+    <!-- Embedded administrative configuration web page, JS controller, and icons -->
     <None Remove="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.html" />
+    <None Remove="Configuration\litefin.js" />
+    <EmbeddedResource Include="Configuration\litefin.js" />
     <None Remove="ThumbImage.png" />
     <EmbeddedResource Include="ThumbImage.png" Condition="Exists('ThumbImage.png')" />
   </ItemGroup>

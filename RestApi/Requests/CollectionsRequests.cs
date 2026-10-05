@@ -18,10 +18,10 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetItemCollectionsRequest : IReturn<QueryResult<BaseItemDto>>
     {
         /// <summary>
-        /// Gets or sets the target item GUID.
+        /// Gets or sets the target item ID (supports both integer and GUID string formats).
         /// </summary>
-        [ApiMember(Name = "ItemId", Description = "Target item GUID", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
-        public Guid ItemId { get; set; }
+        [ApiMember(Name = "ItemId", Description = "Target item ID or GUID", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string ItemId { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the optional target user GUID.

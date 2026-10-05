@@ -44,8 +44,17 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             // Resolve target user
             var user = this.GetTargetUser(request.UserId);
 
-            // Lookup the target media item
-            var item = this.LibraryManager.GetItemById(request.ItemId);
+            // Lookup the target media item by either numeric ID or GUID
+            BaseItem? item = null;
+            if (long.TryParse(request.ItemId, out var longId))
+            {
+                item = this.LibraryManager.GetItemById(longId);
+            }
+            else if (Guid.TryParse(request.ItemId, out var guidId))
+            {
+                item = this.LibraryManager.GetItemById(guidId);
+            }
+
             if (item == null)
             {
                 throw new HttpException("Item not found.")
