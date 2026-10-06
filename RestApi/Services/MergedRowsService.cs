@@ -195,6 +195,12 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                         activityDate = userData?.LastPlayedDate ?? item.DateCreated;
                     }
 
+                    // Filter out any next-up item whose series activity is older than the configured cutoff limit
+                    if (request.NextUpDateCutoff.HasValue && activityDate.HasValue && activityDate.Value < request.NextUpDateCutoff.Value)
+                    {
+                        continue;
+                    }
+
                     itemsWithActivity.Add((item, activityDate.Value));
                 }
             }

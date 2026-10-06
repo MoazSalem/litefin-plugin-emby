@@ -34,5 +34,11 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         /// </summary>
         [ApiMember(Name = "Fields", Description = "Comma-separated ItemFields", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
         public string? Fields { get; set; }
+
+        /// <summary>
+        /// Gets or sets optional date cutoff for Next Up items.
+        /// </summary>
+        [ApiMember(Name = "NextUpDateCutoff", Description = "Starting cutoff date of shows to show in Next Up section", IsRequired = false, DataType = "DateTime", ParameterType = "query", Verb = "GET")]
+        public DateTime? NextUpDateCutoff { get; set; }
     }
 }
