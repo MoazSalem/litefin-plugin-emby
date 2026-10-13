@@ -143,10 +143,12 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
                 try
                 {
-                    // Query latest items for this specific parent library
+                    // Query latest items for this specific parent library.
+                    // For TV shows, disable GroupItems so individual recent episodes can be returned
+                    // with their episode index and title, matching native client representation.
                     var latestQuery = new LatestItemsQuery
                     {
-                        GroupItems = true,
+                        GroupItems = !string.Equals(collectionType, "tvshows", StringComparison.OrdinalIgnoreCase),
                         IncludeItemTypes = includeItemTypes,
                         IsPlayed = request.IsPlayed,
                         Limit = itemLimit,
