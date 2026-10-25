@@ -164,26 +164,42 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
                     DateTimeOffset? activityDate = null;
 
-                    // For episodes, determine when the parent series was last active
+                    // -------------------------------------------------------------------------
+                    // Furthest-Watched Next-Up Ranking
+                    // -------------------------------------------------------------------------
+                    // Rank the series by when the furthest-watched (highest season and episode)
+                    // episode was completed, mirroring canonical Next Up ranking behavior.
+                    // This prevents rewatching or marking an earlier historical episode from
+                    // erroneously bumping the series forward in the unified merged carousel.
                     if (item is Episode episode)
                     {
                         var seriesId = episode.FindSeriesId();
                         if (seriesId != 0)
                         {
-                            var lastPlayedEpisodes = this.LibraryManager.GetItemList(new InternalItemsQuery(user)
+                            // Retrieve the single played episode carrying the highest season and episode numbers
+                            var lastWatchedEpisodes = this.LibraryManager.GetItemList(new InternalItemsQuery(user)
                             {
                                 AncestorIds = new[] { seriesId },
                                 IncludeItemTypes = new[] { "Episode" },
-                                OrderBy = new[] { ("DatePlayed", SortOrder.Descending) },
+                                IsPlayed = true,
+                                IsVirtualItem = false,
+                                OrderBy = new[]
+                                {
+                                    (ItemSortBy.ParentIndexNumber, SortOrder.Descending),
+                                    (ItemSortBy.IndexNumber, SortOrder.Descending),
+                                },
                                 Limit = 1,
                                 Recursive = true,
                             });
 
-                            var lastPlayedEpisode = lastPlayedEpisodes?.FirstOrDefault();
-                            if (lastPlayedEpisode != null)
+                            // Specials (season 0) sort after regular seasons; a season 0 episode here means
+                            // that no regular in-season episodes have been watched for this series yet
+                            var lastWatchedEpisode = lastWatchedEpisodes?.FirstOrDefault();
+                            if (lastWatchedEpisode != null && lastWatchedEpisode.ParentIndexNumber != 0)
                             {
-                                var lastPlayedUserData = this.userDataManager.GetUserData(user, lastPlayedEpisode);
-                                activityDate = lastPlayedUserData?.LastPlayedDate;
+                                // Obtain the user-specific playback state to extract the completion timestamp
+                                var epUserData = this.userDataManager.GetUserData(user, lastWatchedEpisode);
+                                activityDate = epUserData?.LastPlayedDate;
                             }
                         }
                     }
