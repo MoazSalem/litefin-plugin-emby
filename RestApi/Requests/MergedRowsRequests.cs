@@ -40,5 +40,11 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         /// </summary>
         [ApiMember(Name = "NextUpDateCutoff", Description = "Starting cutoff date of shows to show in Next Up section", IsRequired = false, DataType = "DateTime", ParameterType = "query", Verb = "GET")]
         public DateTime? NextUpDateCutoff { get; set; }
+
+        /// <summary>
+        /// Gets or sets optional mark as watched completion threshold percentage (1-100).
+        /// </summary>
+        [ApiMember(Name = "WatchedThreshold", Description = "Mark as watched completion threshold percentage (1-100)", IsRequired = false, DataType = "int", ParameterType = "query", Verb = "GET")]
+        public int? WatchedThreshold { get; set; }
     }
 }

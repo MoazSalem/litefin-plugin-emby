@@ -56,7 +56,18 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             var user = this.GetTargetUser(request.UserId);
             var rowLimit = request.Limit.GetValueOrDefault(12);
 
-            this.Logger.Info("Processing GetContinueAndNextUp for user: {0}, limit: {1}", user.Name, rowLimit);
+            // Determine completion threshold fraction used to decide if an item is considered finished/watched.
+            // Client supplies explicit percentage (1-100). Default fallback is 90%.
+            var thresholdPercentage = (request.WatchedThreshold.HasValue && request.WatchedThreshold.Value is >= 1 and <= 100)
+                ? request.WatchedThreshold.Value
+                : 90;
+            var thresholdFraction = thresholdPercentage / 100.0;
+
+            this.Logger.Info(
+                "Processing GetContinueAndNextUp for user: {0}, limit: {1}, threshold: {2}%",
+                user.Name,
+                rowLimit,
+                thresholdPercentage);
 
             // =========================================================================
             // Dynamic DTO Options Configuration
@@ -130,18 +141,49 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             // Collect items with activity timestamp to allow unified chronological sorting
             var itemsWithActivity = new List<(BaseItem Item, DateTimeOffset ActivityDate)>();
 
-            // Process Resume items
+            // Process Resume items (Continue Watching)
             if (resumeItemsResult.Items != null)
             {
                 foreach (var item in resumeItemsResult.Items)
                 {
+                    // Defensive guard: Discard null entries, folder containers, or non-playable elements
                     if (item == null || item.IsDisplayedAsFolder || item is Folder || item is Season || item is Series)
                     {
                         continue;
                     }
 
+                    // Query the user playback state associated with this item
                     var userData = this.userDataManager.GetUserData(user, item);
-                    var activityDate = userData?.LastPlayedDate ?? item.DateCreated;
+                    if (userData == null)
+                    {
+                        continue;
+                    }
+
+                    // Exclude items that are already marked as played/watched
+                    if (userData.Played)
+                    {
+                        continue;
+                    }
+
+                    // Exclude items where recorded playback position is zero or unstarted
+                    var positionTicks = userData.PlaybackPositionTicks;
+                    if (positionTicks <= 0)
+                    {
+                        continue;
+                    }
+
+                    // Exclude items that have reached or passed the mark as watched threshold
+                    var runtimeTicks = item.RunTimeTicks ?? 0;
+                    if (runtimeTicks > 0)
+                    {
+                        var progressFraction = (double)positionTicks / runtimeTicks;
+                        if (progressFraction >= thresholdFraction)
+                        {
+                            continue;
+                        }
+                    }
+
+                    var activityDate = userData.LastPlayedDate ?? item.DateCreated;
                     itemsWithActivity.Add((item, activityDate));
                 }
             }
@@ -151,6 +193,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             {
                 foreach (var item in nextUpResult.Items)
                 {
+                    // Defensive guard: Ensure item is a valid playable leaf entity
                     if (item == null || item.IsDisplayedAsFolder || item is Folder || item is Season || item is Series)
                     {
                         continue;
@@ -159,6 +202,33 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                     // Avoid duplicate entries if already present in resume list
                     if (itemsWithActivity.Any(x => x.Item.Id == item.Id))
                     {
+                        continue;
+                    }
+
+                    // Query user playback metadata for this next up episode
+                    var userData = this.userDataManager.GetUserData(user, item);
+
+                    // Exclude next-up items that are already marked played
+                    if (userData?.Played == true)
+                    {
+                        continue;
+                    }
+
+                    // Exclude next-up items that have resume progress or exceed watched threshold
+                    var nextUpPositionTicks = userData?.PlaybackPositionTicks ?? 0;
+                    var nextUpRuntimeTicks = item.RunTimeTicks ?? 0;
+                    if (nextUpPositionTicks > 0)
+                    {
+                        if (nextUpRuntimeTicks > 0)
+                        {
+                            var progressFraction = (double)nextUpPositionTicks / nextUpRuntimeTicks;
+                            if (progressFraction >= thresholdFraction)
+                            {
+                                continue;
+                            }
+                        }
+
+                        // Any item with playback progress belongs in Continue Watching, not Next Up
                         continue;
                     }
 
@@ -207,7 +277,6 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                     // Fallback to item user data or creation date
                     if (!activityDate.HasValue)
                     {
-                        var userData = this.userDataManager.GetUserData(user, item);
                         activityDate = userData?.LastPlayedDate ?? item.DateCreated;
                     }
 
