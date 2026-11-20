@@ -59,6 +59,7 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     [Authenticated]
     public class GetSeerrTrendingRequest : IReturn<object>
     {
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -97,6 +98,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int Page { get; set; } = 1;
 
         public string? SortBy { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -111,6 +114,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int Page { get; set; } = 1;
 
         public string? SortBy { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -123,6 +128,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int StudioId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -161,6 +168,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int Page { get; set; } = 1;
 
         public string? SortBy { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -175,6 +184,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int Page { get; set; } = 1;
 
         public string? SortBy { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -187,6 +198,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int NetworkId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -197,6 +210,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrUpcomingMoviesRequest : IReturn<object>
     {
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -207,6 +222,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrUpcomingTvRequest : IReturn<object>
     {
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -216,6 +233,7 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     [Authenticated]
     public class GetSeerrGenreSliderMovieRequest : IReturn<object>
     {
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -225,6 +243,7 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     [Authenticated]
     public class GetSeerrGenreSliderTvRequest : IReturn<object>
     {
+        public string? Language { get; set; }
     }
 
     #endregion
@@ -241,6 +260,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public string Query { get; set; } = string.Empty;
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -251,6 +272,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrCollectionDetailsRequest : IReturn<object>
     {
         public int CollectionId { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -272,6 +295,22 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrPersonCombinedCreditsRequest : IReturn<object>
     {
         public int PersonId { get; set; }
+
+        public string? Language { get; set; }
+    }
+
+    /// <summary>
+    /// Serves a TMDB image through Seerr's image cache so clients without internet access can show Seerr artwork.
+    /// Anonymous because image elements cannot send the Emby authorization header.
+    /// </summary>
+    [Route("/Litefin/Seerr/Image/{Path*}", "GET", Summary = "Serves a TMDB image via Seerr's image cache")]
+    [Route("/Litefin/Seerr/Image/{Path}", "GET", Summary = "Serves a TMDB image via Seerr's image cache")]
+    public class GetSeerrImageRequest : IReturn<object>
+    {
+        /// <summary>
+        /// Gets or sets the TMDB image path, for example <c>t/p/w500/abc.jpg</c>.
+        /// </summary>
+        public string? Path { get; set; }
     }
 
     /// <summary>
@@ -282,6 +321,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrMovieDetailsRequest : IReturn<object>
     {
         public int TmdbId { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -294,6 +335,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int TmdbId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -306,6 +349,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int TmdbId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -316,6 +361,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
     public class GetSeerrTvDetailsRequest : IReturn<object>
     {
         public int TmdbId { get; set; }
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -328,6 +375,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int TmdbId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     /// <summary>
@@ -340,6 +389,8 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int TmdbId { get; set; }
 
         public int Page { get; set; } = 1;
+
+        public string? Language { get; set; }
     }
 
     #endregion

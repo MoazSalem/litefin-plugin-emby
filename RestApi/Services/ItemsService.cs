@@ -303,7 +303,9 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                         itemDto.PremiereDate = null;
                         itemDto.EndDate = null;
                         itemDto.OfficialRating = null;
-                        itemDto.CommunityRating = null;
+
+                        // Preserve CommunityRating so library thumbnail cards can display ratings
+                        // if the feature is enabled on the client.
                         itemDto.ChannelId = null;
                         itemDto.Status = null;
                         itemDto.AirDays = null;

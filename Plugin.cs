@@ -47,7 +47,7 @@ namespace Litefin.Emby.Plugin
         public override string Name => "Litefin";
 
         /// <inheritdoc />
-        public override string Description => "Litefin server-side integration for Emby Server: Home hero carousel, merged rows, client settings backups, and Seerr proxy.";
+        public override string Description => "Litefin server-side integration for Emby Server: Home hero carousel, merged rows, client settings backups, anime markers, and Seerr proxy.";
 
         /// <inheritdoc />
         public override Guid Id => Guid.Parse("f5c68360-ca47-4648-b47c-3da5f112aa8f");
