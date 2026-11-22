@@ -5,6 +5,7 @@
 namespace Litefin.Emby.Plugin.RestApi.Requests
 {
     using Litefin.Emby.Plugin.Models;
+    using MediaBrowser.Controller.Net;
     using MediaBrowser.Model.Services;
 
     /// <summary>

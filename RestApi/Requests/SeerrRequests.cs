@@ -84,6 +84,12 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int? Studio { get; set; }
 
         public string? SortBy { get; set; }
+
+        public string? KeywordIds { get; set; }
+
+        public string? WatchProviders { get; set; }
+
+        public string? WatchRegion { get; set; }
     }
 
     /// <summary>
@@ -154,6 +160,12 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int? Network { get; set; }
 
         public string? SortBy { get; set; }
+
+        public string? KeywordIds { get; set; }
+
+        public string? WatchProviders { get; set; }
+
+        public string? WatchRegion { get; set; }
     }
 
     /// <summary>
@@ -224,6 +236,16 @@ namespace Litefin.Emby.Plugin.RestApi.Requests
         public int Page { get; set; } = 1;
 
         public string? Language { get; set; }
+    }
+
+    /// <summary>
+    /// Gets the discover slider configuration (built-in and custom rows, order, enabled state) from Seerr.
+    /// Seerr allows this for any authenticated user, so no admin permission is required.
+    /// </summary>
+    [Route("/Litefin/Seerr/Settings/Discover", "GET", Summary = "Gets Seerr discover slider configuration")]
+    [Authenticated]
+    public class GetSeerrDiscoverSettingsRequest : IReturn<object>
+    {
     }
 
     /// <summary>

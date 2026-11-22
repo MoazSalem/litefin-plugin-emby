@@ -42,6 +42,18 @@ namespace Litefin.Emby.Plugin.RestApi.Services
         private static readonly System.Text.RegularExpressions.Regex ImageDuotoneSegmentRegex =
             new System.Text.RegularExpressions.Regex(@"^w[0-9]+_filter\(duotone,[0-9A-Fa-f]{6},[0-9A-Fa-f]{6}\)\z", System.Text.RegularExpressions.RegexOptions.Compiled);
 
+        // Numeric TMDB identifier lists such as "123,456" or "8|337" (keywords, watch providers)
+        private static readonly System.Text.RegularExpressions.Regex NumericIdListRegex =
+            new System.Text.RegularExpressions.Regex(@"^[0-9]+([,|][0-9]+)*\z", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // TMDB original-language filters: ISO 639-1 codes, optionally pipe-separated ("ja|ko")
+        private static readonly System.Text.RegularExpressions.Regex OriginalLanguageFilterRegex =
+            new System.Text.RegularExpressions.Regex(@"^[a-z]{2}(\|[a-z]{2})*\z", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // ISO 3166-1 alpha-2 region codes used by TMDB watch provider filters
+        private static readonly System.Text.RegularExpressions.Regex WatchRegionRegex =
+            new System.Text.RegularExpressions.Regex(@"^[A-Z]{2}\z", System.Text.RegularExpressions.RegexOptions.Compiled);
+
         // Image types GetImage passes through, mapped to the type it responds with; anything else
         // falls back to the TMDB redirect. Seerr labels JPEGs "image/jpg" (image/<file extension>).
         private static readonly Dictionary<string, string> AllowedImageContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -367,10 +379,13 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 queryParams.Add($"genre={Uri.EscapeDataString(request.Genre)}");
             }
 
-            var effectiveLanguage = this.ResolveEffectiveLanguage(request.Language);
-            if (!string.IsNullOrWhiteSpace(effectiveLanguage))
+            // Seerr reads `language` on /discover/movies|tv as the TMDB original-language filter, not the
+            // display language. Forwarding the Accept-Language header or a UI locale such as "en-US" made
+            // every result disappear, so only explicit ISO 639-1 filters ("ja", "ja|ko") pass through.
+            var movieLangFilter = request.Language?.Trim();
+            if (!string.IsNullOrWhiteSpace(movieLangFilter) && OriginalLanguageFilterRegex.IsMatch(movieLangFilter!))
             {
-                queryParams.Add($"language={Uri.EscapeDataString(effectiveLanguage!)}");
+                queryParams.Add($"language={Uri.EscapeDataString(movieLangFilter!)}");
             }
 
             if (!string.IsNullOrWhiteSpace(request.Certification))
@@ -380,10 +395,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 queryParams.Add($"certification={Uri.EscapeDataString(request.Certification)}");
             }
 
-            if (request.Keywords.HasValue)
-            {
-                queryParams.Add($"keywords={request.Keywords.Value.ToString(CultureInfo.InvariantCulture)}");
-            }
+            AppendCatalogFilters(queryParams, request.Keywords, request.KeywordIds, request.WatchProviders, request.WatchRegion);
 
             if (request.Studio.HasValue)
             {
@@ -433,10 +445,13 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 queryParams.Add($"genre={Uri.EscapeDataString(request.Genre)}");
             }
 
-            var effectiveLanguage = this.ResolveEffectiveLanguage(request.Language);
-            if (!string.IsNullOrWhiteSpace(effectiveLanguage))
+            // Seerr reads `language` on /discover/movies|tv as the TMDB original-language filter, not the
+            // display language. Forwarding the Accept-Language header or a UI locale such as "en-US" made
+            // every result disappear, so only explicit ISO 639-1 filters ("ja", "ja|ko") pass through.
+            var tvLangFilter = request.Language?.Trim();
+            if (!string.IsNullOrWhiteSpace(tvLangFilter) && OriginalLanguageFilterRegex.IsMatch(tvLangFilter!))
             {
-                queryParams.Add($"language={Uri.EscapeDataString(effectiveLanguage!)}");
+                queryParams.Add($"language={Uri.EscapeDataString(tvLangFilter!)}");
             }
 
             if (!string.IsNullOrWhiteSpace(request.Certification))
@@ -446,10 +461,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 queryParams.Add($"certification={Uri.EscapeDataString(request.Certification)}");
             }
 
-            if (request.Keywords.HasValue)
-            {
-                queryParams.Add($"keywords={request.Keywords.Value.ToString(CultureInfo.InvariantCulture)}");
-            }
+            AppendCatalogFilters(queryParams, request.Keywords, request.KeywordIds, request.WatchProviders, request.WatchRegion);
 
             if (request.Network.HasValue)
             {
@@ -502,6 +514,15 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             var basePath = this.AppendEffectiveLanguage("/discover/tv/upcoming", request.Language);
             return this.ProxyGetMerged5PagesAsync(basePath, request.Page);
         }
+
+        /// <summary>
+        /// Gets the discover slider configuration (built-in and custom rows, order, enabled state) from Seerr.
+        /// Seerr allows this for any authenticated user, so no admin permission is required.
+        /// </summary>
+        /// <param name="request">The discover settings request.</param>
+        /// <returns>The Seerr response.</returns>
+        public Task<object> Get(GetSeerrDiscoverSettingsRequest request)
+            => this.ProxyGetAsync("/settings/discover");
 
         public Task<object> Get(GetSeerrGenreSliderMovieRequest request)
         {
@@ -1671,6 +1692,41 @@ namespace Litefin.Emby.Plugin.RestApi.Services
             return null;
         }
 
+        // =========================================================================
+        // Catalog Filter Resolution Helper
+        // =========================================================================
+        // Appends keyword and watch provider filters shared by movie and tv discover routes.
+        // The legacy single keywords identifier wins over keywordIds; malformed list values are
+        // ignored so they never reach Seerr.
+        private static void AppendCatalogFilters(
+            List<string> queryParams,
+            int? keywords,
+            string? keywordIds,
+            string? watchProviders,
+            string? watchRegion)
+        {
+            // Prefer single keyword if explicitly supplied by legacy callers
+            if (keywords.HasValue)
+            {
+                queryParams.Add($"keywords={keywords.Value.ToString(CultureInfo.InvariantCulture)}");
+            }
+            // Otherwise, validate comma- or pipe-separated keyword lists
+            else if (!string.IsNullOrWhiteSpace(keywordIds) && NumericIdListRegex.IsMatch(keywordIds))
+            {
+                queryParams.Add($"keywords={Uri.EscapeDataString(keywordIds)}");
+            }
+
+            // TMDB only honours watch providers together with an ISO 3166-1 alpha-2 watch region
+            if (!string.IsNullOrWhiteSpace(watchProviders)
+                && NumericIdListRegex.IsMatch(watchProviders)
+                && !string.IsNullOrWhiteSpace(watchRegion)
+                && WatchRegionRegex.IsMatch(watchRegion))
+            {
+                queryParams.Add($"watchRegion={watchRegion}");
+                queryParams.Add($"watchProviders={Uri.EscapeDataString(watchProviders)}");
+            }
+        }
+
         private static string? GetServiceName(string mediaType)
             => string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase) ? "sonarr" :
                string.Equals(mediaType, "movie", StringComparison.OrdinalIgnoreCase) ? "radarr" : null;
@@ -2121,7 +2177,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
                 {
                     if (!string.IsNullOrEmpty(newSecret) && !string.IsNullOrEmpty(newToken))
                     {
-                        return new SeerrCsrfToken(newSecret, newToken, DateTime.UtcNow.AddMinutes(30));
+                        return new SeerrCsrfToken(newSecret!, newToken!, DateTime.UtcNow.AddMinutes(30));
                     }
 
                     return null!;
@@ -2133,7 +2189,7 @@ namespace Litefin.Emby.Plugin.RestApi.Services
 
                     if (!string.IsNullOrEmpty(effectiveSecret) && !string.IsNullOrEmpty(effectiveToken))
                     {
-                        return new SeerrCsrfToken(effectiveSecret, effectiveToken, DateTime.UtcNow.AddMinutes(30));
+                        return new SeerrCsrfToken(effectiveSecret!, effectiveToken!, DateTime.UtcNow.AddMinutes(30));
                     }
 
                     return existing!;
